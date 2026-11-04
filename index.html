@@ -6,7 +6,7 @@
     <title>Manajer Keuangan Pribadi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Lucide Icons untuk Ikon Menarik -->
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         .glass {
@@ -59,10 +59,42 @@
             </button>
         </div>
 
+        <!-- Kartu Ringkasan Keuangan & Saran -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Kolom Kiri: Input Manual & AI Scan -->
+            <div class="glass p-5 rounded-2xl shadow-xl flex items-center gap-4">
+                <div class="p-3 bg-emerald-500/20 text-emerald-300 rounded-xl border border-emerald-500/30">
+                    <i data-lucide="trending-up" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-200 font-medium">Total Pemasukan</p>
+                    <h3 id="summary-income" class="text-xl font-bold text-emerald-300">Rp 0</h3>
+                </div>
+            </div>
+            <div class="glass p-5 rounded-2xl shadow-xl flex items-center gap-4">
+                <div class="p-3 bg-rose-500/20 text-rose-300 rounded-xl border border-rose-500/30">
+                    <i data-lucide="trending-down" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-200 font-medium">Total Pengeluaran</p>
+                    <h3 id="summary-expense" class="text-xl font-bold text-rose-300">Rp 0</h3>
+                </div>
+            </div>
+            <div class="glass p-5 rounded-2xl shadow-xl flex items-center gap-4">
+                <div class="p-3 bg-blue-500/20 text-blue-300 rounded-xl border border-blue-500/30">
+                    <i data-lucide="wallet" class="w-8 h-8"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-200 font-medium">Sisa Saldo Bersih</p>
+                    <h3 id="summary-balance" class="text-xl font-bold text-white">Rp 0</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kolom Utama -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Kiri: Input & Scan -->
             <div class="md:col-span-1 space-y-6">
-                <!-- Form Input Transaksi (Pemasukan & Pengeluaran) -->
+                <!-- Form Transaksi -->
                 <div class="glass p-6 rounded-2xl shadow-xl">
                     <h3 class="text-lg font-bold mb-4 text-white flex items-center gap-2">
                         <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-300"></i> Catat Transaksi
@@ -117,12 +149,23 @@
                 </div>
             </div>
 
-            <!-- Kolom Kanan: Grafik & Riwayat -->
+            <!-- Kanan: Grafik, Saran Keuangan & Riwayat -->
             <div class="md:col-span-2 space-y-6">
-                <!-- Grafik Batang Menyamping -->
+                <!-- Kotak Saran Keuangan Pintar -->
+                <div class="glass p-5 rounded-2xl shadow-xl border-l-4 border-amber-400 flex items-start gap-3">
+                    <div class="p-2 bg-amber-400/20 text-amber-300 rounded-xl mt-0.5">
+                        <i data-lucide="lightbulb" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-white uppercase tracking-wider">Saran Keuangan Pintar</h4>
+                        <p id="financial-advice" class="text-xs text-gray-200 mt-1 leading-relaxed">Memuat analisis keuangan...</p>
+                    </div>
+                </div>
+
+                <!-- Grafik Perbandingan Pemasukan vs Pengeluaran -->
                 <div class="glass p-6 rounded-2xl shadow-xl">
                     <h3 class="text-lg font-bold mb-4 text-white flex items-center gap-2">
-                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue-300"></i> Ringkasan Pengeluaran
+                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue-300"></i> Perbandingan Arus Kas (Pemasukan vs Pengeluaran)
                     </h3>
                     <div class="relative h-64 w-full">
                         <canvas id="expenseChart"></canvas>
@@ -157,7 +200,6 @@
     </div>
 
     <script type="module">
-        // 1. IMPORT FIREBASE & INISIALISASI
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
@@ -220,7 +262,6 @@
             signOut(auth);
         });
 
-        // SIMPAN TRANSAKSI (PEMASUKAN / PENGELUARAN)
         formExpense.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!currentUser) return;
@@ -257,7 +298,8 @@
                 const querySnapshot = await getDocs(q);
                 
                 tableBody.innerHTML = '';
-                const chartData = {};
+                let totalIncome = 0;
+                let totalExpense = 0;
 
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
@@ -268,13 +310,10 @@
                     const isIncome = data.type === 'Pemasukan';
                     const badgeColor = isIncome ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30';
 
-                    // Hanya hitung pengeluaran untuk grafik
-                    if (!isIncome) {
-                        if(chartData[data.category]) {
-                            chartData[data.category] += data.amount;
-                        } else {
-                            chartData[data.category] = data.amount;
-                        }
+                    if (isIncome) {
+                        totalIncome += data.amount;
+                    } else {
+                        totalExpense += data.amount;
                     }
 
                     const tr = document.createElement('tr');
@@ -298,11 +337,40 @@
                     tableBody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-200">Belum ada transaksi tercatat.</td></tr>';
                 }
 
-                updateChart(chartData);
+                // Update Kartu Statistik
+                document.getElementById('summary-income').innerText = `Rp ${totalIncome.toLocaleString('id-ID')}`;
+                document.getElementById('summary-expense').innerText = `Rp ${totalExpense.toLocaleString('id-ID')}`;
+                
+                const balance = totalIncome - totalExpense;
+                const balanceEl = document.getElementById('summary-balance');
+                balanceEl.innerText = `Rp ${balance.toLocaleString('id-ID')}`;
+                balanceEl.className = `text-xl font-bold ${balance >= 0 ? 'text-emerald-300' : 'text-rose-300'}`;
+
+                // Update Saran Keuangan Pintar
+                updateFinancialAdvice(totalIncome, totalExpense, balance);
+
+                // Update Grafik Perbandingan Arus Kas
+                updateChart(totalIncome, totalExpense);
                 lucide.createIcons();
             } catch (error) {
                 console.error("Gagal memuat data", error);
                 tableBody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-red-300">Gagal memuat data. Periksa koneksi atau Firestore Rules.</td></tr>';
+            }
+        }
+
+        function updateFinancialAdvice(income, expense, balance) {
+            const adviceEl = document.getElementById('financial-advice');
+            if (income === 0 && expense === 0) {
+                adviceEl.innerText = "Mulai catat pemasukan dan pengeluaran Anda secara rutin agar sistem dapat memberikan analisis dan saran keuangan yang akurat.";
+                return;
+            }
+
+            if (expense > income) {
+                adviceEl.innerText = `Peringatan! Pengeluaran Anda telah melebihi pemasukan sebesar Rp ${(expense - income).toLocaleString('id-ID')}. Segera kurangi pengeluaran yang kurang penting untuk menghindari defisit keuangan.`;
+            } else if (income > 0 && (expense / income) > 0.8) {
+                adviceEl.innerText = `Waspada! Pengeluaran Anda sudah memakan lebih dari 80% total pemasukan. Sisa saldo bersih Anda menipis (Rp ${balance.toLocaleString('id-ID')}). Cobalah lebih berhemat minggu ini.`;
+            } else {
+                adviceEl.innerText = `Keuangan Anda berada dalam kondisi sehat! Rasio pengeluaran terkendali dan Anda berhasil menyisihkan sisa saldo bersih sebesar Rp ${balance.toLocaleString('id-ID')}. Pertahankan kebiasaan menabung ini!`;
             }
         }
 
@@ -317,39 +385,34 @@
             }
         }
 
-        // GRAFIK PENGELUARAN
-        function updateChart(dataObj) {
+        // GRAFIK PEMASUKAN VS PENGELUARAN (MENUNJUKKAN SALDO BERKURANG SAAT PENGELUARAN BERTAMBAH)
+        function updateChart(income, expense) {
             const ctx = document.getElementById('expenseChart').getContext('2d');
-            const sortedEntries = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
-            const labels = sortedEntries.map(entry => entry[0]);
-            const values = sortedEntries.map(entry => entry[1]);
 
             if (chartInstance) chartInstance.destroy();
 
             chartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: labels.length ? labels : ['Belum ada pengeluaran'],
+                    labels: ['Total Pemasukan', 'Total Pengeluaran'],
                     datasets: [{
-                        label: 'Pengeluaran (Rp)',
-                        data: values.length ? values : [0],
+                        label: 'Jumlah (Rp)',
+                        data: [income, expense],
                         backgroundColor: [
-                            'rgba(244, 63, 94, 0.7)', 'rgba(59, 130, 246, 0.7)',
-                            'rgba(234, 179, 8, 0.7)', 'rgba(168, 85, 247, 0.7)',
-                            'rgba(20, 184, 166, 0.7)'
+                            'rgba(16, 185, 129, 0.7)', // Hijau untuk Pemasukan
+                            'rgba(244, 63, 94, 0.7)'   // Merah untuk Pengeluaran (Menunjukkan penurunan saldo)
                         ],
                         borderColor: 'rgba(255, 255, 255, 0.8)',
                         borderWidth: 1,
-                        borderRadius: 6
+                        borderRadius: 8
                     }]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: {
+                        y: {
                             ticks: {
                                 color: 'rgba(255, 255, 255, 0.9)',
                                 callback: function(value) {
@@ -360,7 +423,7 @@
                             },
                             grid: { color: 'rgba(255, 255, 255, 0.1)' }
                         },
-                        y: {
+                        x: {
                             ticks: { color: 'rgba(255, 255, 255, 0.9)', font: { weight: 'bold' } },
                             grid: { display: false }
                         }
@@ -369,7 +432,6 @@
             });
         }
 
-        // AI SCANNER DENGAN PROXY
         btnScan.addEventListener('click', async () => {
             const file = inputFile.files[0];
             if (!file) {
@@ -435,7 +497,6 @@
             }
         });
 
-        // Jalankan render ikon Lucide saat awal halaman dimuat
         document.addEventListener("DOMContentLoaded", () => {
             lucide.createIcons();
         });
