@@ -199,10 +199,20 @@
         </div>
     </div>
 
+    <!-- IMPORT GEMINI SDK RESMI DARI NPM CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.run/@google/genai"
+        }
+      }
+    </script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { GoogleGenAI } from "@google/genai";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD-_Mpy6m5D_oVd74QQHzle2xWtFgvUz-8",
@@ -220,6 +230,9 @@
         const provider = new GoogleAuthProvider();
 
         const GEMINI_API_KEY = "AQ.Ab8RN6LaHzuQkMndmnV3LUV8yu2DoVQvhYCfrE6Diffo6WlHYg";
+        
+        // Inisialisasi Gemini SDK Resmi
+        const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
         let currentUser = null;
         let chartInstance = null;
@@ -362,7 +375,7 @@
             }
 
             if (expense > income) {
-                adviceEl.innerText = `Peringatan! Pengeluaran Anda telah melebihi pemasukan sebesar Rp ${(expense - income).toLocaleString('id-ID')}. Segera kurangi pengeluaran yang kurang penting untuk menghindari defisit keuangan.`;
+                adviceEl.innerText = `Peringatan! Pengeluaran Anda telah melebihi pemasukan sebesar Rp ${(expense - income).toLocaleString('id-ID')}. Segera kurangi pengeluaran yang kurang tinggi untuk menghindari defisit keuangan.`;
             } else if (income > 0 && (expense / income) > 0.8) {
                 adviceEl.innerText = `Waspada! Pengeluaran Anda sudah memakan lebih dari 80% total pemasukan. Sisa saldo bersih Anda menipis (Rp ${balance.toLocaleString('id-ID')}). Cobalah lebih berhemat minggu ini.`;
             } else {
@@ -423,7 +436,7 @@
             });
         }
 
-        // AI SCANNER DENGAN PENANGANAN ERROR & FETCH LANGSUNG
+        // SCANNER MENGGUNAKAN SDK RESMI @google/genai
         btnScan.addEventListener('click', async () => {
             const file = inputFile.files[0];
             if (!file) {
@@ -437,9 +450,13 @@
             btnScan.disabled = true;
 
             try {
+                // Konversi file ke base64 murni tanpa awalan data:image/...
                 const base64Data = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.onloadend = () => {
+                        const base64String = reader.result.split(',')[1];
+                        resolve(base64String);
+                    };
                     reader.onerror = () => reject(new Error("Gagal membaca file gambar"));
                     reader.readAsDataURL(file);
                 });
@@ -449,29 +466,21 @@
                 2. Kategori (Pilih persis salah satu: Makanan, Transportasi, Belanja, Tagihan, Lainnya).
                 Format balasan harus persis seperti ini: NOMINAL|KATEGORI`;
 
-                const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-                
-                // Menggunakan fetch langsung dengan mode cors
-                const response = await fetch(targetUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: promptText },
-                                { inline_data: { mime_type: file.type, data: base64Data } }
-                            ]
-                        }]
-                    })
+                // Panggilan menggunakan SDK resmi
+                const response = await ai.models.generateContent({
+                    model: 'gemini-1.5-flash',
+                    contents: [
+                        promptText,
+                        {
+                            inlineData: {
+                                mimeType: file.type,
+                                data: base64Data
+                            }
+                        }
+                    ]
                 });
 
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const resultData = await response.json();
-                const aiText = resultData.candidates[0].content.parts[0].text.trim();
+                const aiText = response.text ? response.text.trim() : "";
                 
                 const parts = aiText.split('|');
                 if(parts.length >= 2) {
@@ -486,8 +495,8 @@
                 }
 
             } catch (error) {
-                console.error("Scan Error:", error);
-                scanStatus.innerText = "Gagal memindai (Load Failed). Pastikan ukuran foto tidak terlalu besar atau format didukung.";
+                console.error("Scan SDK Error:", error);
+                scanStatus.innerText = "Gagal memindai. Pastikan kunci API valid dan format gambar didukung.";
                 scanStatus.className = "mt-3 text-xs text-rose-300 font-semibold text-center";
             } finally {
                 btnScan.disabled = false;
