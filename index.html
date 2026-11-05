@@ -199,11 +199,11 @@
         </div>
     </div>
 
-    <!-- IMPORT GEMINI SDK RESMI DARI NPM CDN -->
+    <!-- PENGGUNAAN SDK WEB RESMI GEMINI UNTUK BROWSER -->
     <script type="importmap">
       {
         "imports": {
-          "@google/genai": "https://esm.run/@google/genai"
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
         }
       }
     </script>
@@ -212,7 +212,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-        import { GoogleGenAI } from "@google/genai";
+        // Import Web SDK resmi
+        import { GoogleGenerativeAI } from "@google/generative-ai";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD-_Mpy6m5D_oVd74QQHzle2xWtFgvUz-8",
@@ -230,9 +231,6 @@
         const provider = new GoogleAuthProvider();
 
         const GEMINI_API_KEY = "AQ.Ab8RN6LaHzuQkMndmnV3LUV8yu2DoVQvhYCfrE6Diffo6WlHYg";
-        
-        // Inisialisasi Gemini SDK Resmi
-        const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
         let currentUser = null;
         let chartInstance = null;
@@ -375,7 +373,7 @@
             }
 
             if (expense > income) {
-                adviceEl.innerText = `Peringatan! Pengeluaran Anda telah melebihi pemasukan sebesar Rp ${(expense - income).toLocaleString('id-ID')}. Segera kurangi pengeluaran yang kurang tinggi untuk menghindari defisit keuangan.`;
+                adviceEl.innerText = `Peringatan! Pengeluaran Anda telah melebihi pemasukan sebesar Rp ${(expense - income).toLocaleString('id-ID')}. Segera kurangi pengeluaran yang kurang penting untuk menghindari defisit keuangan.`;
             } else if (income > 0 && (expense / income) > 0.8) {
                 adviceEl.innerText = `Waspada! Pengeluaran Anda sudah memakan lebih dari 80% total pemasukan. Sisa saldo bersih Anda menipis (Rp ${balance.toLocaleString('id-ID')}). Cobalah lebih berhemat minggu ini.`;
             } else {
@@ -436,7 +434,7 @@
             });
         }
 
-        // SCANNER MENGGUNAKAN SDK RESMI @google/genai
+        // IMPLEMENTASI SCAN MENGGUNAKAN GOOGLE GENERATIVE AI WEB SDK
         btnScan.addEventListener('click', async () => {
             const file = inputFile.files[0];
             if (!file) {
@@ -450,13 +448,14 @@
             btnScan.disabled = true;
 
             try {
-                // Konversi file ke base64 murni tanpa awalan data:image/...
+                // Inisialisasi Web SDK
+                const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+                // Ubah gambar ke Base64
                 const base64Data = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result.split(',')[1];
-                        resolve(base64String);
-                    };
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
                     reader.onerror = () => reject(new Error("Gagal membaca file gambar"));
                     reader.readAsDataURL(file);
                 });
@@ -466,21 +465,17 @@
                 2. Kategori (Pilih persis salah satu: Makanan, Transportasi, Belanja, Tagihan, Lainnya).
                 Format balasan harus persis seperti ini: NOMINAL|KATEGORI`;
 
-                // Panggilan menggunakan SDK resmi
-                const response = await ai.models.generateContent({
-                    model: 'gemini-1.5-flash',
-                    contents: [
-                        promptText,
-                        {
-                            inlineData: {
-                                mimeType: file.type,
-                                data: base64Data
-                            }
-                        }
-                    ]
-                });
+                const imagePart = {
+                    inlineData: {
+                        data: base64Data,
+                        mimeType: file.type
+                    }
+                };
 
-                const aiText = response.text ? response.text.trim() : "";
+                // Panggil Model Gemini
+                const result = await model.generateContent([promptText, imagePart]);
+                const response = await result.response;
+                const aiText = response.text().trim();
                 
                 const parts = aiText.split('|');
                 if(parts.length >= 2) {
@@ -491,13 +486,14 @@
                     scanStatus.innerText = "Berhasil dipindai! Silakan klik Simpan Transaksi.";
                     scanStatus.className = "mt-3 text-xs text-emerald-300 font-semibold text-center";
                 } else {
-                    throw new Error("Format respons AI tidak valid");
+                    throw new Error("Format respons AI tidak valid.");
                 }
 
             } catch (error) {
                 console.error("Scan SDK Error:", error);
-                scanStatus.innerText = "Gagal memindai. Pastikan kunci API valid dan format gambar didukung.";
-                scanStatus.className = "mt-3 text-xs text-rose-300 font-semibold text-center";
+                // MENAMPILKAN PESAN ERROR ASLI DI LAYAR
+                scanStatus.innerText = "Error: " + error.message;
+                scanStatus.className = "mt-3 text-xs text-rose-300 font-semibold text-center break-words";
             } finally {
                 btnScan.disabled = false;
             }
